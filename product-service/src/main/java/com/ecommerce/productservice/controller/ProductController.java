@@ -1,0 +1,90 @@
+package com.ecommerce.productservice.controller;
+
+import com.ecommerce.productservice.model.Product;
+import com.ecommerce.productservice.service.ProductService;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.http.ResponseEntity;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/products")
+@SecurityRequirement(name = "bearerAuth")
+@RequiredArgsConstructor
+public class ProductController {
+
+    private final ProductService productService;
+    @Value("${internal.service-token}")
+    private String internalServiceToken;
+
+    @GetMapping
+    public Page<Product> getAllProducts(@RequestParam(required = false) String keyword,
+                                        @RequestParam(required = false) String category,
+                                        Pageable pageable) {
+        return productService.findProducts(keyword, category, pageable);
+    }
+
+    @GetMapping("/category/{categoryId}")
+    public Page<Product> getProductsByCategory(@PathVariable Long categoryId, Pageable pageable) {
+        return productService.findByCategoryId(categoryId, pageable);
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<Product> getProductById(@PathVariable Long id) {
+        return productService.findById(id)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    @PostMapping
+    public Product createProduct(@RequestBody Product product) {
+        return productService.create(product);
+    }
+
+    @PutMapping("/{id}")
+    public Product updateProduct(@PathVariable Long id, @RequestBody Product product) {
+        return productService.update(id, product);
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteProduct(@PathVariable Long id) {
+        productService.delete(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/{id}/stock")
+    public Product decreaseStock(
+            @PathVariable Long id,
+            @RequestParam Integer quantity,
+            @RequestHeader("X-Internal-Service-Token") String serviceToken,
+            Authentication authentication) {
+        if (!internalServiceToken.equals(serviceToken)
+                || authentication == null
+                || !authentication.isAuthenticated()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Internal service access required.");
+        }
+        return productService.decreaseStock(id, quantity);
+    }
+
+    @PatchMapping("/{id}/stock/restore")
+    public Product restoreStock(
+            @PathVariable Long id,
+            @RequestParam Integer quantity,
+            @RequestHeader("X-Internal-Service-Token") String serviceToken,
+            Authentication authentication) {
+        if (!internalServiceToken.equals(serviceToken)
+                || authentication == null
+                || !authentication.isAuthenticated()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Internal service access required.");
+        }
+        return productService.increaseStock(id, quantity);
+    }
+}
